@@ -920,7 +920,7 @@ struct SwiftEditorDocument::Implementation {
 
   std::vector<DiagnosticEntryInfo> ParserDiagnostics;
   RefPtr<SwiftDocumentSemanticInfo> SemanticInfo;
-  CodeFormatOptions FormatOptions;
+  CodeFormatter::Options FormatOptions;
 
   std::shared_ptr<SwiftDocumentSyntaxInfo> SyntaxInfo;
 
@@ -931,10 +931,9 @@ struct SwiftEditorDocument::Implementation {
 
   llvm::sys::Mutex AccessMtx;
 
-  Implementation(StringRef FilePath, SwiftLangSupport &LangSupport,
-                 CodeFormatOptions options)
-    : LangSupport(LangSupport), FilePath(FilePath), FormatOptions(options) {
-      SemanticInfo = new SwiftDocumentSemanticInfo(FilePath, LangSupport);
+  Implementation(StringRef FilePath, SwiftLangSupport &LangSupport)
+    : LangSupport(LangSupport), FilePath(FilePath) {
+    SemanticInfo = new SwiftDocumentSemanticInfo(FilePath, LangSupport);
   }
 
   void buildSwiftInv(trace::SwiftInvocation &Inv);
@@ -1628,8 +1627,8 @@ public:
 } // anonymous namespace
 
 SwiftEditorDocument::SwiftEditorDocument(StringRef FilePath,
-    SwiftLangSupport &LangSupport, CodeFormatOptions Options)
-  :Impl(*new Implementation(FilePath, LangSupport, Options)) { }
+    SwiftLangSupport &LangSupport)
+  :Impl(*new Implementation(FilePath, LangSupport)) { }
 
 SwiftEditorDocument::~SwiftEditorDocument()
 {
@@ -1836,7 +1835,7 @@ void SwiftEditorDocument::applyFormatOptions(OptionsDictionary &FmtOptions) {
   FmtOptions.valueForOption(KeyTabWidth, Impl.FormatOptions.TabWidth);
 }
 
-const CodeFormatOptions &SwiftEditorDocument::getFormatOptions() {
+const CodeFormatter::Options &SwiftEditorDocument::getFormatOptions() {
   return Impl.FormatOptions;
 }
 
@@ -1867,8 +1866,8 @@ void SwiftEditorDocument::formatText(unsigned Line, unsigned Length,
   }
 
   LineRange inputRange = LineRange(Line, Length);
-  CodeFormatOptions Options = getFormatOptions();
-  auto indented = reformat(inputRange, Options, SM, SF);
+  CodeFormatter CF(getFormatOptions(), SF, SM);
+  auto indented = CF.reformat(inputRange);
 
   LineRange LineRange = indented.first;
   StringRef ModifiedText = indented.second;

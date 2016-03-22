@@ -14,14 +14,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "swift/Frontend/Frontend.h"
-#include "swift/IDE/Formatting.h"
-#include "swift/Subsystems.h"
 #include "clang/Basic/Version.h"
 #include "clang/Format/Format.h"
+#include "swift/IDE/Formatting.h"
+#include "swift/Frontend/Frontend.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Signals.h"
+#include "swift/Subsystems.h"
 
 #include <sstream>
 
@@ -91,7 +91,7 @@ namespace swift {
     static cl::list<std::string> FileNames(cl::Positional, cl::desc("[<file> ...]"),
                                            cl::cat(SwiftFormatCategory));
 
-    CodeFormatOptions FormatOptions;
+    CodeFormatter::Options FormatOptions;
 
     class FormatterDocument {
       SourceManager SM;
@@ -110,6 +110,8 @@ namespace swift {
       } DiagConsumer;
 
     public:
+      std::unique_ptr<CodeFormatter> Formatter;
+
       FormatterDocument(std::unique_ptr<llvm::MemoryBuffer> Buffer) {
         updateCode(std::move(Buffer));
       }
@@ -131,23 +133,17 @@ namespace swift {
           P.parseTopLevel();
           Done = P.Tok.is(tok::eof);
         }
-      }
 
-      std::pair<LineRange, std::string> reformat(LineRange Range, CodeFormatOptions Options) {
-          return swift::ide::reformat(Range, FormatOptions, SM, Parser->getSourceFile());
-      }
-
-      const MemoryBuffer &memBuffer() const {
-        return *SM.getLLVMSourceMgr().getMemoryBuffer(BufferID);
+        Formatter.reset( new CodeFormatter(FormatOptions, Parser->getSourceFile(), SM) );
       }
 
       std::pair<unsigned, unsigned>
       getLineAndColumn(unsigned ByteOffset) const {
-        auto &Buf = memBuffer();
-        if (ByteOffset > Buf.getBufferSize())
+        auto Buf = SM.getLLVMSourceMgr().getMemoryBuffer(BufferID);
+        if (ByteOffset > Buf->getBufferSize())
           return std::make_pair(0, 0);
 
-        SMLoc Loc = SMLoc::getFromPointer(Buf.getBufferStart() + ByteOffset);
+        SMLoc Loc = SMLoc::getFromPointer(Buf->getBufferStart() + ByteOffset);
         return SM.getLLVMSourceMgr().getLineAndColumn(Loc, BufferID);
       }
 
@@ -235,7 +231,7 @@ namespace swift {
       if (LineRanges.empty())
         LineRanges.push_back("1:999999");
 
-      std::string Output = Doc.memBuffer().getBuffer();
+      std::string Output = Doc.Formatter->getText();
       Replacements Replaces;
 
       for ( unsigned Range = 0 ; Range < LineRanges.size() ; Range++ ) {
@@ -250,12 +246,12 @@ namespace swift {
         }
 
         for ( unsigned Line = FromLine ; Line<=ToLine ; Line++ ) {
-          size_t Offset = getOffsetOfLine(Line,Output);
-          ssize_t Length = getOffsetOfLine(Line+1,Output)-1-Offset;
+          size_t Offset = Doc.Formatter->getLineOffset(Line);
+          ssize_t Length = Doc.Formatter->getLineOffset(Line+1)-1-Offset;
           if (Length < 0)
             break;
 
-          std::string Formatted = Doc.reformat(LineRange(Line,1), FormatOptions).second;
+          std::string Formatted = Doc.Formatter->reformat(LineRange(Line,1)).second;
           if (Formatted.find_first_not_of(" \t\v\f", 0) == StringRef::npos)
               Formatted = "";
 

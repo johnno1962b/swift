@@ -1,4 +1,4 @@
-//===--- Formatting.h --------------------------------------------------===//
+//===--- Formatting.h - Swift code indenting --------------------*- C++ -*-===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,34 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SWIFT_FORMATTING_H
-#define SWIFT_FORMATTING_H
+#ifndef SWIFT_IDE_CODE_FORMATTING_H
+#define SWIFT_IDE_CODE_FORMATTING_H
 
 #include "swift/Basic/SourceManager.h"
 #include "swift/AST/Module.h"
 
+namespace {
+  class FormatContext;
+}
+
 namespace swift {
-namespace ide {
-
-struct CodeFormatOptions {
-  bool UseTabs = false;
-  unsigned IndentWidth = 4;
-  unsigned TabWidth = 4;
-};
-
-/// \brief Returns the offset (in bytes) to the start of \p LineIndex
-size_t getOffsetOfLine(unsigned LineIndex, StringRef Text);
-
-/// \brief Returns the offset to the first Non-WhiteSpace Character
-size_t getOffsetOfTrimmedLine(unsigned LineIndex, StringRef Text);
-
-/// \brief Returns the Text on \p LineIndex, excluding Leading WS
-StringRef getTrimmedTextForLine(unsigned LineIndex, StringRef Text);
-
-/// \brief Returns the number of spaces at the begining of \p LineIndex
-/// or if indenting is done by Tabs, the number of Tabs * TabWidthp
-size_t getExpandedIndentForLine(unsigned LineIndex, CodeFormatOptions Options,
-                                StringRef Text);
+  namespace ide {
 
 class LineRange {
   unsigned StartLine;
@@ -84,20 +68,45 @@ public:
 
 };
 
-//===----------------------------------------------------------------------===//
-// Reformat
-//===----------------------------------------------------------------------===//
-/// Request a reformatting of the \p Range, using \p Options to determine the
-/// how the format should be applied to \p SF. \p SM is required to provide
-/// an ASTContext and other helper data.
-/// \returns a pair containing which line ranges where updated and a string
-/// containing the applied edits.
-std::pair<LineRange, std::string> reformat(LineRange Range,
-                                           CodeFormatOptions Options,
-                                           SourceManager &SM,
-                                           SourceFile &SF);
+class CodeFormatter {
+public:
+  struct Options {
+    bool UseTabs = false;
+    unsigned IndentWidth = 4;
+    unsigned TabWidth = 4;
+  };
 
-} // namespace ide
-} // namespace swift
+private:
+  const Options &FmtOptions;
+  SourceManager &SM;
+  SourceFile &SF;
 
-#endif // LLVM_SWIFT_FORMATTING_H
+  size_t getTrimmedLineOffset(unsigned LineIndex);
+  size_t getExpandedIndentForLine(unsigned LineIndex);
+  StringRef getTrimmedTextForLine(unsigned LineIndex);
+
+  std::pair<LineRange,std::string> indent(unsigned LineIndex, FormatContext &FC);
+
+public:
+  CodeFormatter(const Options &FmtOptions, SourceFile &SF, SourceManager &SM)
+    : FmtOptions(FmtOptions), SM(SM), SF(SF) { }
+
+  StringRef getText(void);
+  size_t getLineOffset(unsigned LineIndex);
+
+  //===----------------------------------------------------------------------===//
+  // Reformat
+  //===----------------------------------------------------------------------===//
+  /// Request a reformatting of the \p Range, using \p Options to determine the
+  /// how the format should be applied to \p SF. \p SM is required to provide
+  /// an ASTContext and other helper data.
+  /// \returns a pair containing which line ranges where updated and a string
+  /// containing the applied edits.
+  std::pair<LineRange,std::string> reformat( LineRange Range );
+
+};
+
+  }
+}
+
+#endif // SWIFT_IDE_CODE_FORMATTING_H

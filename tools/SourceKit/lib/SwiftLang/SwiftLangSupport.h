@@ -62,9 +62,7 @@ class SwiftEditorDocument :
   Implementation &Impl;
 
 public:
-
-  SwiftEditorDocument(StringRef FilePath, SwiftLangSupport &LangSupport,
-       swift::ide::CodeFormatOptions Options = swift::ide::CodeFormatOptions());
+  SwiftEditorDocument(StringRef FilePath, SwiftLangSupport &LangSupport);
   ~SwiftEditorDocument();
 
   ImmutableTextSnapshotRef initializeText(llvm::MemoryBuffer *Buf,
@@ -88,7 +86,7 @@ public:
   void formatText(unsigned Line, unsigned Length, EditorConsumer &Consumer);
   void expandPlaceholder(unsigned Offset, unsigned Length,
                          EditorConsumer &Consumer);
-  const swift::ide::CodeFormatOptions &getFormatOptions();
+  const swift::ide::CodeFormatter::Options &getFormatOptions();
 
   static void reportDocumentStructure(swift::SourceFile &SrcFile,
                                       EditorConsumer &Consumer);

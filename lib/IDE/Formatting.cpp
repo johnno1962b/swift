@@ -1,4 +1,4 @@
-//===--- Formatting.cpp --------------------------------------------------===//
+//===--- Formatting.cpp - Swift code indenting ------------------*- C++ -*-===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,34 +10,33 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "swift/AST/ASTWalker.h"
 #include "swift/IDE/Formatting.h"
-#include "swift/IDE/SourceEntityWalker.h"
+#include "swift/AST/ASTWalker.h"
 #include "swift/Frontend/Frontend.h"
+#include "swift/IDE/SourceEntityWalker.h"
 #include "swift/Subsystems.h"
 
 using namespace swift;
-using namespace ide;
 
-namespace {
+namespace  {
+
+typedef llvm::SmallString<64> StringBuilder;
+
+static SourceLoc getVarDeclInitEnd(VarDecl *VD) {
+  return VD->getBracesRange().isValid() ? VD->getBracesRange().End :
+    VD->getParentInitializer() &&
+    VD->getParentInitializer()->getEndLoc().isValid() ?
+    VD->getParentInitializer()->getEndLoc() :
+    SourceLoc();
+}
 
 struct SiblingAlignInfo {
   SourceLoc Loc;
   bool ExtraIndent;
 };
 
-typedef llvm::SmallString<64> StringBuilder;
-
-static SourceLoc getVarDeclInitEnd(VarDecl *VD) {
-  return VD->getBracesRange().isValid()
-      ? VD->getBracesRange().End
-      : VD->getParentInitializer() &&
-              VD->getParentInitializer()->getEndLoc().isValid()
-           ? VD->getParentInitializer()->getEndLoc()
-           : SourceLoc();
-}
-
-class FormatContext {
+class FormatContext
+{
   SourceManager &SM;
   std::vector<swift::ASTWalker::ParentTy>& Stack;
   std::vector<swift::ASTWalker::ParentTy>::reverse_iterator Cursor;
@@ -107,7 +106,7 @@ public:
       for (auto *Attr : D->getAttrs()) {
         SourceLoc AttrLoc = Attr->getRangeWithAt().Start;
         if (AttrLoc.isValid() && SM.isBeforeInBuffer(AttrLoc, SL))
-            SL = AttrLoc;
+          SL = AttrLoc;
       }
 
       return SM.getLineAndColumn(SL);
@@ -443,15 +442,15 @@ class FormatWalker: public ide::SourceEntityWalker {
         return false;
       auto NextLoc = TI->getLoc();
       return SM.isBeforeInBuffer(SeparatorLoc, TargetLoc) &&
-      !SM.isBeforeInBuffer(NextLoc, TargetLoc);
+        !SM.isBeforeInBuffer(NextLoc, TargetLoc);
     }
 
     bool isTargetImmediateAfter(SourceLoc Loc) {
       adjustTokenIteratorToImmediateAfter(Loc);
       // Make sure target loc is after loc
       return SM.isBeforeInBuffer(Loc, TargetLoc) &&
-      // Make sure immediate loc after loc is not before target loc.
-      !SM.isBeforeInBuffer(TI->getLoc(), TargetLoc);
+        // Make sure immediate loc after loc is not before target loc.
+        !SM.isBeforeInBuffer(TI->getLoc(), TargetLoc);
     }
 
     bool sameLineWithTarget(SourceLoc Loc) {
@@ -461,8 +460,8 @@ class FormatWalker: public ide::SourceEntityWalker {
   public:
     SiblingCollector(SourceManager &SM, std::vector<Token> &Tokens,
                      SourceLoc &TargetLoc) : SM(SM), Tokens(Tokens),
-    TargetLoc(TargetLoc), TI(Tokens.begin()),
-    NeedExtraIndentation(false) {}
+                                             TargetLoc(TargetLoc), TI(Tokens.begin()),
+                                             NeedExtraIndentation(false) {}
 
     void collect(ASTNode Node) {
       if (FoundSibling.isValid())
@@ -616,14 +615,14 @@ class FormatWalker: public ide::SourceEntityWalker {
     if (InDocCommentBlock || InCommentLine)
       return;
     for (auto InValid = Loc.isInvalid(); CurrentTokIt != Tokens.end() &&
-         (InValid || SM.isBeforeInBuffer(CurrentTokIt->getLoc(), Loc));
+           (InValid || SM.isBeforeInBuffer(CurrentTokIt->getLoc(), Loc));
          CurrentTokIt ++) {
       if (CurrentTokIt->getKind() == tok::comment) {
         auto StartLine = SM.getLineNumber(CurrentTokIt->getRange().getStart());
         auto EndLine = SM.getLineNumber(CurrentTokIt->getRange().getEnd());
         auto TokenStr = CurrentTokIt->getRange().str();
         InDocCommentBlock |= TargetLine > StartLine && TargetLine <= EndLine &&
-        TokenStr.startswith("/*");
+          TokenStr.startswith("/*");
         InCommentLine |= StartLine == TargetLine && TokenStr.startswith("//");
       }
     }
@@ -639,10 +638,10 @@ class FormatWalker: public ide::SourceEntityWalker {
 
 public:
   explicit FormatWalker(SourceFile &SF, SourceManager &SM)
-  :SF(SF), SM(SM),
-  Tokens(tokenize(Options, SM, SF.getBufferID().getValue())),
-  CurrentTokIt(Tokens.begin()),
-  SCollector(SM, Tokens, TargetLocation) {}
+    :SF(SF), SM(SM),
+     Tokens(tokenize(Options, SM, SF.getBufferID().getValue())),
+     CurrentTokIt(Tokens.begin()),
+     SCollector(SM, Tokens, TargetLocation) {}
 
   FormatContext walkToLocation(SourceLoc Loc) {
     Stack.clear();
@@ -694,19 +693,15 @@ public:
   }
 };
 
-class CodeFormatter {
-  CodeFormatOptions &FmtOptions;
-public:
-  CodeFormatter(CodeFormatOptions &Options)
-    :FmtOptions(Options) { }
+}
 
-  std::pair<LineRange, std::string> indent(unsigned LineIndex,
-                                           FormatContext &FC,
-                                           StringRef Text) {
+using namespace swift::ide;
+
+  std::pair<LineRange,std::string> CodeFormatter::indent(unsigned LineIndex, FormatContext &FC) {
 
     // If having sibling locs to align with, respect siblings.
     if (FC.HasSibling()) {
-      StringRef Line = swift::ide::getTrimmedTextForLine(LineIndex, Text);
+      StringRef Line = getTrimmedTextForLine(LineIndex);
       StringBuilder Builder;
       FC.padToSiblingColumn(Builder);
       if (FC.needExtraIndentationForSibling()) {
@@ -722,8 +717,7 @@ public:
     // Take the current indent position of the outer context, then add another
     // indent level if expected.
     auto LineAndColumn = FC.indentLineAndColumn();
-    size_t ExpandedIndent = swift::ide::getExpandedIndentForLine(LineAndColumn.first,
-                                                                 FmtOptions, Text);
+    size_t ExpandedIndent = getExpandedIndentForLine(LineAndColumn.first);
     auto AddIndentFunc = [&] () {
       auto Width = FmtOptions.UseTabs ? FmtOptions.TabWidth
                                       : FmtOptions.IndentWidth;
@@ -745,7 +739,7 @@ public:
     }
 
     // Reformat the specified line with the calculated indent.
-    StringRef Line = swift::ide::getTrimmedTextForLine(LineIndex, Text);
+    StringRef Line = getTrimmedTextForLine(LineIndex);
     std::string IndentedLine;
     if (FmtOptions.UseTabs)
       IndentedLine.assign(ExpandedIndent / FmtOptions.TabWidth, '\t');
@@ -758,12 +752,13 @@ public:
     return std::make_pair(range, IndentedLine);
   }
 
-};
+StringRef CodeFormatter::getText() {
+  auto SourceBufferID = SF.getBufferID().getValue();
+  return SM.getLLVMSourceMgr().getMemoryBuffer(SourceBufferID)->getBuffer();
+}
 
-} //anonymous namespace
-
-size_t swift::ide::getOffsetOfLine(unsigned LineIndex, StringRef Text) {
-  //  SourceLoc start = SourceLoc(llvm::SMLoc::getFromPointer(Text.begin()));
+size_t CodeFormatter::getLineOffset(unsigned LineIndex) {
+  StringRef Text = getText();
   // FIXME: We should have a cached line map in EditableTextBuffer, for now
   // we just do the slow naive thing here.
   size_t LineOffset = 0;
@@ -783,10 +778,11 @@ size_t swift::ide::getOffsetOfLine(unsigned LineIndex, StringRef Text) {
   return LineOffset;
 }
 
-size_t swift::ide::getOffsetOfTrimmedLine(unsigned LineIndex, StringRef Text) {
-  size_t LineOffset = swift::ide::getOffsetOfLine(LineIndex, Text);
+size_t CodeFormatter::getTrimmedLineOffset(unsigned LineIndex) {
+  size_t LineOffset = getLineOffset(LineIndex);
 
   // Skip leading whitespace.
+  StringRef Text = getText();
   size_t FirstNonWSOnLine = Text.find_first_not_of(" \t\v\f", LineOffset);
   if (FirstNonWSOnLine != std::string::npos)
     LineOffset = FirstNonWSOnLine;
@@ -794,43 +790,34 @@ size_t swift::ide::getOffsetOfTrimmedLine(unsigned LineIndex, StringRef Text) {
   return LineOffset;
 }
 
-llvm::StringRef swift::ide::getTrimmedTextForLine(unsigned LineIndex,
-                                                  StringRef Text) {
-  size_t LineOffset = getOffsetOfTrimmedLine(LineIndex, Text);
+StringRef CodeFormatter::getTrimmedTextForLine(unsigned LineIndex) {
+  StringRef Text = getText();
+  size_t LineOffset = getTrimmedLineOffset(LineIndex);
   size_t LineEnd = Text.find_first_of("\r\n", LineOffset);
   return Text.slice(LineOffset, LineEnd);
 }
 
-size_t swift::ide::getExpandedIndentForLine(unsigned LineIndex,
-                                            CodeFormatOptions Options,
-                                            StringRef Text) {
-  size_t LineOffset = getOffsetOfLine(LineIndex, Text);
+size_t CodeFormatter::getExpandedIndentForLine(unsigned LineIndex) {
+  size_t LineOffset = getLineOffset(LineIndex);
 
   // Tab-expand all leading whitespace
+  StringRef Text = getText();
   size_t FirstNonWSOnLine = Text.find_first_not_of(" \t\v\f", LineOffset);
   size_t Indent = 0;
   while (LineOffset < Text.size() && LineOffset < FirstNonWSOnLine) {
     if (Text[LineOffset++] == '\t')
-      Indent += Options.TabWidth;
+      Indent += FmtOptions.TabWidth;
     else
       Indent += 1;
   }
   return Indent;
 }
 
-std::pair<LineRange, std::string> swift::ide::reformat(LineRange Range,
-                                                       CodeFormatOptions Options,
-                                                       SourceManager &SM,
-                                                       SourceFile &SF) {
-            FormatWalker walker(SF, SM);
-            auto SourceBufferID = SF.getBufferID().getValue();
-            StringRef Text = SM.getLLVMSourceMgr()
-                               .getMemoryBuffer(SourceBufferID)->getBuffer();
-            size_t Offset = getOffsetOfTrimmedLine(Range.startLine(), Text);
-            SourceLoc Loc = SM.getLocForBufferStart(SourceBufferID)
-                              .getAdvancedLoc(Offset);
-            FormatContext FC = walker.walkToLocation(Loc);
-            CodeFormatter CF(Options);
-            return CF.indent(Range.startLine(), FC, Text);
+std::pair<LineRange,std::string> CodeFormatter::reformat( LineRange Range ) {
+  FormatWalker walker(SF, SM);
+  size_t Offset = getTrimmedLineOffset(Range.startLine());
+  auto BufID = SF.getBufferID().getValue();
+  SourceLoc Loc = SM.getLocForBufferStart(BufID).getAdvancedLoc(Offset);
+  FormatContext FC = walker.walkToLocation(Loc);
+  return indent(Range.startLine(), FC);
 }
-

@@ -13,6 +13,9 @@
 #ifndef SWIFT_FORMATTING_H
 #define SWIFT_FORMATTING_H
 
+#include "swift/Basic/SourceManager.h"
+#include "swift/AST/Module.h"
+
 namespace swift {
 namespace ide {
 

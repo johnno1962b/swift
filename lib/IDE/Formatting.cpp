@@ -10,12 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "swift/AST/AST.h"
 #include "swift/AST/ASTWalker.h"
-#include "swift/Frontend/Frontend.h"
-#include "swift/Basic/SourceManager.h"
 #include "swift/IDE/Formatting.h"
 #include "swift/IDE/SourceEntityWalker.h"
+#include "swift/Frontend/Frontend.h"
 #include "swift/Subsystems.h"
 
 using namespace swift;
